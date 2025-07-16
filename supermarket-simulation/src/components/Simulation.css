@@ -52,6 +52,28 @@
   background-color: #e9e9e9;
 }
 
+.tooltip {
+  background-color: rgba(0, 0, 0, 0.8);
+  color: white;
+  padding: 6px 10px;
+  border-radius: 4px;
+  font-size: 14px;
+  pointer-events: none;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  transform: translateY(-100%);
+  white-space: nowrap;
+}
+
+.tooltip:after {
+  content: "";
+  position: absolute;
+  top: 100%;
+  left: 10px;
+  border-width: 5px;
+  border-style: solid;
+  border-color: rgba(0, 0, 0, 0.8) transparent transparent transparent;
+}
+
 canvas {
   background-color: white;
   box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);

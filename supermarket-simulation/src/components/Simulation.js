@@ -28,6 +28,10 @@ class Product {
     if (productIndex < this.stall.products.length - 1) productsNearby.push(this.stall.products[productIndex + 1]);
     return productsNearby;
   }
+
+  getTooltipText() {
+    return 'Цена: ' + this.cost.toFixed(2) + '\nID номер: ' + this.ID + '\nПривлекательность: ' + Math.floor(this.attractive) + '%';
+  }
 }
 
 class Stall {
@@ -56,6 +60,9 @@ class Stall {
       calculateDistance(x, y, this.x + this.width, this.y),
       calculateDistance(x, y, this.x + this.width, this.y + this.height)
     );
+  }
+  getTooltipText() {
+    return 'Количество товаров: ' + this.products.length;
   }
 }
 
@@ -87,10 +94,10 @@ class Cashier {
     }
   }
   
-  processCustomer() {
+  processCustomer(time) {
     if (this.queue.length > 0) {
       this.processingTime++;
-      if (this.processingTime > 120) {
+      if (this.processingTime > time) {
         const customer = this.queue.shift();
         let total = 0;
         customer.productsTaken.forEach(product => {
@@ -103,6 +110,10 @@ class Cashier {
       }
     }
     return null;
+  }
+
+  getTooltipText() {
+    return 'Выручка: ' + this.totalRevenue.toFixed(2) + '\nОбслужено посетителей: ' + this.customersProcessed + '\nДлина очереди: ' + this.queue.length;
   }
 }
 
@@ -216,12 +227,9 @@ class Human {
   return [avoidanceForceX, avoidanceForceY];
 }
 
-// Проверяет, находится ли цель за указанным прилавком
 isBehindRect(rect) {
-  // Проверяем, находится ли цель за прилавком по оси X
   const isBehindX = (this.x - this.size * 2 < rect.x && this.targetX > rect.x + rect.width) ||
                    (this.x > rect.x + rect.width - this.size * 2 && this.targetX < rect.x);
-  // Проверяем, находимся ли мы перед прилавком
   const isInFrontOfRect = this.y >= rect.y - this.size * 4 && this.y <= rect.y + rect.height + this.size * 4;
   
   return isBehindX && isInFrontOfRect;
@@ -230,7 +238,6 @@ isBehindRect(rect) {
 isAtSideRect(rect) {
   const isAtSideY = (this.y - this.size * 2 < rect.y && this.targetY > rect.y + rect.height) ||
                    (this.y > rect.y + rect.height - this.size * 2 && this.targetY < rect.y);
-  // Проверяем, находимся ли мы перед прилавком
   const isAtSideX = this.x >= rect.x - this.size * 4 && this.x <= rect.x + rect.width + this.size * 4;
   return isAtSideX && isAtSideY;
 }
@@ -280,7 +287,7 @@ class Customer extends Human {
     this.productsTaken = [];
     this.checkedStallsIDs = [];
     this.checking = false;
-    this.state = 'shopping'; // 'shopping', 'avoiding', 'goingToCashier', 'leaving'
+    this.state = 'shopping'; // 'shopping', 'goingToCashier', 'leaving'
     this.timeSpent = 0;
     this.totalSpent = 0;
     this.currentProductTarget = null;
@@ -288,7 +295,10 @@ class Customer extends Human {
     this.bestCashier = null;
     
     for (let i = 0; i < productsAmountToBuy; i++) {
-      this.productsToBuy.push(Math.floor(Math.random() * (productsCount - 1) + 1.1));
+      let newProductID = 0;
+      while (newProductID === 0 || this.productsToBuy.includes(newProductID))
+        newProductID = Math.floor(Math.random() * (productsCount - 1) + 1.1);
+      this.productsToBuy.push(newProductID);
     }
   }
   findNearestStallToCheck(stalls, stallsHeight, stallsWidth) {
@@ -322,8 +332,20 @@ class Customer extends Human {
             this.nearestStallData = this.findNearestStallToCheck(stalls, stallsHeight, stallsWidth);
         else if (this.checkedStallsIDs.includes(this.nearestStallData[0].ID))
           this.nearestStallData = this.findNearestStallToCheck(stalls, stallsHeight, stallsWidth);
-        if (!this.nearestStallData) {
-          // Нет больше прилавков для проверки - идем на кассу
+        let flag = true;
+        if (this.productsTaken.length > 0) {
+          const productsTakenIDS = [];
+          for (const product of this.productsTaken) {
+            productsTakenIDS.push(product.ID);
+          }
+          for (const product of this.productsToBuy) {
+            if (!productsTakenIDS.includes(product))
+              flag = false;
+          }
+        }
+        else flag = false;
+        if (!this.nearestStallData || flag) {
+          // Нет больше прилавков для проверки или все товары уже куплены - идем на кассу
           this.goToCashier(cashiers);
           return;
         }
@@ -405,10 +427,8 @@ class Customer extends Human {
   }
   
   takeProduct(product) {
-    if (this.money < product.cost) return false;
     
     this.productsTaken.push(product);
-    this.money -= product.cost;
     this.totalSpent += product.cost;
     
     // Удаляем товар из прилавка
@@ -421,12 +441,9 @@ class Customer extends Human {
     // Проверяем привлекательные соседние товары
     const nearbyProducts = product.checkNearby();
     for (const nearbyProduct of nearbyProducts) {
-      if (Math.random() * 100 < nearbyProduct.attractive && 
-          this.money >= nearbyProduct.cost &&
-          !this.productsTaken.includes(nearbyProduct)) {
+      if (Math.random() * 100 < nearbyProduct.attractive && !this.productsTaken.includes(nearbyProduct)) {
         this.uselessProductsCount++;
         this.productsTaken.push(nearbyProduct);
-        this.money -= nearbyProduct.cost;
         this.totalSpent += nearbyProduct.cost;
         
         // Удаляем соседний товар
@@ -470,6 +487,17 @@ class Customer extends Human {
       ctx.arc(this.x, this.y - 10, this.productsTaken.length, 0, Math.PI * 2);
       ctx.fill();
     }
+  }
+
+  getTooltipText() {
+    let text = 'Список покупок: ';
+    for (const ID of this.productsToBuy) 
+      text += '\n' + ID;
+    text += '\nНайденные продукты: '
+    for (const product of this.productsTaken) 
+      text += '\n' + product.ID;
+    text += '\nПредварительный чек: ' + this.totalSpent.toFixed(2);
+    return text;
   }
 }
 
@@ -544,6 +572,12 @@ class Manager extends Human {
     else if (this.state === 'leaving')
       this.leaveStore();
   }
+
+  getTooltipText() {
+    if (this.currentProductTarget)
+      return 'Пополняет товар: ' + this.currentProductTarget.ID;
+    else return '';
+  }
 }
 
 function calculateDistance(x1, y1, x2, y2) {
@@ -564,6 +598,7 @@ const Simulation = () => {
   const customersRef = useRef([]);
   const cashiersRef = useRef([]);
   const managersRef = useRef([]);
+  const [tooltip, setTooltip] = useState(null);
   const [stats, setStats] = useState({
     totalRevenue: 0,
     customersServed: 0,
@@ -583,7 +618,8 @@ const Simulation = () => {
     customersCount: 5,
     speed: 1,
     cashiersCount: 2,
-    spawnRate: 100
+    spawnRate: 100,
+    cashierProcessTime: 120
   });
   
   const [visibleCount, setVisibleCount] = useState(0);
@@ -615,7 +651,7 @@ const Simulation = () => {
           Math.random() * 100 + 10,
           (j + 1) + i * (Math.floor(params.stallsHeight / 12) + 1),
           newStall,
-          Math.random() <= 0.5 ? 0 : Math.random() * 90
+          Math.random() <= 0.25 ? 0 : Math.random() * 100
         );
         newStall.products.push(newProduct);
         newProducts.push(newProduct);
@@ -672,6 +708,72 @@ const Simulation = () => {
       [name]: parseFloat(value)
     }));
   };
+
+  const handleMouseMove = (e) => {
+    if (!canvasRef.current) return;
+
+    const canvas = canvasRef.current;
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    let entity = null;
+
+    for (const customer of customersRef.current) {
+      const dx = customer.x - x;
+      const dy = customer.y - y;
+
+      if (Math.sqrt(dx*dx + dy*dy) < customer.size * 2) {
+        entity = {type: 'customer', data: customer};
+        break;
+      }
+    }
+
+    if (!entity) {
+      for (const manager of managersRef.current) {
+        const dx = manager.x - x;
+        const dy = manager.y - y;
+
+        if (Math.sqrt(dx*dx + dy*dy) < manager.size * 2) {
+          entity = {type: 'manager', data: manager};
+          break;
+        }
+      }
+    }
+
+    if (!entity) {
+      for (const stall of stallsRef.current) {
+        for (const product of stall.products) {
+          const dx = product.x - x;
+          const dy = product.y - y;
+          if (Math.sqrt(dx*dx + dy*dy) < product.size) {
+            entity = {type: 'product', data: product};
+            break;
+          }
+        }
+        if (!entity) {
+        if (x > stall.x && x < stall.x + stall.width && y > stall.y && y < stall.y + stall.height) {
+          entity = {type: 'stall', data: stall};
+          break;
+        }
+      }
+    }
+  }
+    if (!entity) {
+      for (const cashier of cashiersRef.current) {
+        if (x > cashier.x && x < cashier.x + cashier.width && y > cashier.y && y < cashier.y + cashier.height) {
+          entity = {type: 'cashier', data: cashier};
+          break;
+        }
+      }
+    }
+
+    setTooltip(entity 
+      ? {
+        entity, 
+        position: {x: e.clientX, y: e.clientY},
+        text: entity.data.getTooltipText()
+      } : null);
+  }
   
   const toggleSimulation = () => {
     setParams(prev => ({
@@ -697,7 +799,7 @@ const Simulation = () => {
       
       // Process cashiers
       cashiersRef.current.forEach(cashier => {
-        const finishedCustomer = cashier.processCustomer();
+        const finishedCustomer = cashier.processCustomer(params.cashierProcessTime);
         if (finishedCustomer) {
           finishedCustomer.leaveStore(params.height);
           setStats(prev => ({
@@ -799,12 +901,28 @@ const Simulation = () => {
     return () => {
       cancelAnimationFrame(animationFrameId);
     };
-  }, [params.isRunning, params.stallsHeight, params.stallsWidth, params.spawnRate, params.height, params.width, params.speed, params.stallsCount]);
+  }, [params.isRunning, params.stallsHeight, params.stallsWidth, params.spawnRate, params.height, params.width, params.speed, params.stallsCount, params.cashierProcessTime]);
   
   return (
     <div className="simulation-container">
       <div className="controls">
         <h2>Управление симуляцией</h2>
+        
+        {tooltip && (
+        <div 
+          className="tooltip"
+          style={{
+            position: 'fixed',
+            left: tooltip.position.x,
+            top: tooltip.position.y,
+            zIndex: 100
+          }}
+        >
+          {tooltip.text.split('\n').map((line, i) => (
+          <div key={i}>{line}</div>
+        ))}
+        </div>
+        )}
         
         <div className="control-group">
           <label>
@@ -838,7 +956,7 @@ const Simulation = () => {
         
         <div className="control-group">
           <label>
-            Скорость покупателей:
+            Скорость:
             <input
               type="range"
               name="speed"
@@ -866,6 +984,21 @@ const Simulation = () => {
             {params.spawnRate}
           </label>
         </div>
+
+        <div className="control-group">
+          <label>
+            Время работы кассы:
+            <input
+              type="range"
+              name="cashierProcessTime"
+              min="30"
+              max="300"
+              value={params.cashierProcessTime}
+              onChange={handleParamChange}
+            />
+            {params.cashierProcessTime}
+          </label>
+        </div>
         
         <div className="buttons">
           <button onClick={initSimulation}>Сбросить</button>
@@ -891,6 +1024,8 @@ const Simulation = () => {
           ref={canvasRef}
           width={params.width}
           height={params.height}
+          onMouseMove={handleMouseMove}
+          onMouseOut={() => setTooltip(null)}
         />
       </div>
     </div>
