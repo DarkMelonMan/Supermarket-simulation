@@ -85,7 +85,7 @@ class Cashier {
     ctx.fillRect(this.x, this.y, this.width, this.height);
     ctx.fill();
     
-    // Draw queue
+    // Отрисовка очереди
     ctx.fillStyle = 'rgba(255, 99, 71, 0.5)';
     for (let i = 0; i < this.queue.length; i++) {
       ctx.beginPath();
@@ -286,8 +286,7 @@ class Customer extends Human {
     this.productsToBuy = [];
     this.productsTaken = [];
     this.checkedStallsIDs = [];
-    this.checking = false;
-    this.state = 'shopping'; // 'shopping', 'goingToCashier', 'leaving'
+    this.state = 'shopping'; // 'shopping', 'goingToCashier', 'leaving', 'inQueue'
     this.timeSpent = 0;
     this.totalSpent = 0;
     this.currentProductTarget = null;
@@ -301,37 +300,37 @@ class Customer extends Human {
       this.productsToBuy.push(newProductID);
     }
   }
-  findNearestStallToCheck(stalls, stallsHeight, stallsWidth) {
+  findNearestStallToCheck(stalls) {
     const nearestStall = super.findNearestStall(stalls);
     const nearestStallData = [nearestStall];
     
-    if (nearestStall != null && !this.checkedStallsIDs.includes(nearestStall.ID) && !this.checking) {
-      if (Math.abs(this.x - nearestStall.x) < Math.abs(this.x - nearestStall.x - stallsWidth)) 
+    if (nearestStall != null && !this.checkedStallsIDs.includes(nearestStall.ID)) {
+      if (Math.abs(this.x - nearestStall.x) < Math.abs(this.x - nearestStall.x - nearestStall.width)) 
         nearestStallData.push(nearestStall.x - this.size * 2);
       else 
-        nearestStallData.push(nearestStall.x + stallsWidth + this.size * 2);
-      nearestStallData.push(nearestStall.y + Math.random() * stallsHeight);
+        nearestStallData.push(nearestStall.x + nearestStall.width + this.size * 2);
+      nearestStallData.push(nearestStall.y + Math.random() * nearestStall.height);
       return nearestStallData;
     } else if (stalls.length >= 1 && nearestStall != null) {
       let newStalls = stalls.filter(item => item.ID !== nearestStall.ID);
-      return this.findNearestStallToCheck(newStalls, stallsHeight, stallsWidth);
+      return this.findNearestStallToCheck(newStalls);
     } else {
       return null;
     }
   }
   
-  checkStalls(height, stalls, stallsHeight, stallsWidth, cashiers) {
+  checkStalls(height, stalls, cashiers) {
     if (this.state === 'leaving' && height - this.y < this.size * 2) {
       this.left = true;
     }
     if (this.bypassingXRect || this.bypassingYRect || this.state === 'leaving') return;
     if (this.state === 'shopping') {
-      // Если нет текущей цели, ищем новый прилавк
+      // Если нет текущей цели, ищем новый прилавок
       if (!this.currentProductTarget) {
         if (this.nearestStallData.length === 0)
-            this.nearestStallData = this.findNearestStallToCheck(stalls, stallsHeight, stallsWidth);
+            this.nearestStallData = this.findNearestStallToCheck(stalls);
         else if (this.checkedStallsIDs.includes(this.nearestStallData[0].ID))
-          this.nearestStallData = this.findNearestStallToCheck(stalls, stallsHeight, stallsWidth);
+          this.nearestStallData = this.findNearestStallToCheck(stalls);
         let flag = true;
         if (this.productsTaken.length > 0) {
           const productsTakenIDS = [];
@@ -410,7 +409,7 @@ class Customer extends Human {
       return;
     }
     
-    // Find cashier with shortest queue
+    // Найти кассу с минимальной очередью
     let bestCashier = cashiers[0];
     if (this.bestCashier)
       bestCashier = this.bestCashier;
@@ -481,7 +480,7 @@ class Customer extends Human {
     if (this.state !== 'inQueue'){
       super.draw(ctx);
       
-      // Draw basket contents
+      // Отрисовка продуктовой корзины
       ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
       ctx.beginPath();
       ctx.arc(this.x, this.y - 10, this.productsTaken.length, 0, Math.PI * 2);
@@ -797,7 +796,7 @@ const Simulation = () => {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       
       
-      // Process cashiers
+      // Обработка касс
       cashiersRef.current.forEach(cashier => {
         const finishedCustomer = cashier.processCustomer(params.cashierProcessTime);
         if (finishedCustomer) {
@@ -814,28 +813,27 @@ const Simulation = () => {
         }
       });
 
-      // Draw stalls and products
+      // Отрисовка прилавков и товаров
       stallsRef.current.forEach(p => {
         p.draw(ctx);
         p.products.forEach(pr => pr.draw(ctx));
       });
       
-      // Draw cashiers
+      // Отрисовка касс
       cashiersRef.current.forEach(c => c.draw(ctx));
       
-      // Move and draw customers
+      // Отрисовка и передвижение покупателей
       const currentHumans = customersRef.current.concat(managersRef.current);
       customersRef.current.forEach(c => {
         c.checkStalls(params.height,
           stallsRef.current, 
-          params.stallsHeight, 
-          params.stallsWidth, 
           cashiersRef.current
         );
         c.move(canvas.width, canvas.height, stallsRef.current, currentHumans, cashiersRef.current);
         c.draw(ctx);
       });
 
+      // Отрисовка и передвижение менеджеров
       managersRef.current.forEach(m => {
         m.searchForProductsToRestock(stallsRef.current, managersRef.current);
         m.move(canvas.width, canvas.height, stallsRef.current, currentHumans, cashiersRef.current);
@@ -889,7 +887,7 @@ const Simulation = () => {
     if (params.isRunning) {
       animationFrameId = requestAnimationFrame(animate);
     } else {
-      // Draw current state when paused
+      // Отрисовка текущего состояния во время паузы
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       stallsRef.current.forEach(p => p.draw(ctx));
       stallsRef.current.forEach(p => p.products.forEach(pr => pr.draw(ctx)));
